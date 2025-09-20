@@ -1734,9 +1734,6 @@ const handleFilterChange = (value: string) => {
                     <div key={doc.id} className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-indigo-500" />
                       <span className="text-sm">{doc.name}</span>
-                      <span className="text-xs text-gray-500">
-                        ({doc.serialNo})
-                      </span>
                     </div>
                   ))}
                 </div>

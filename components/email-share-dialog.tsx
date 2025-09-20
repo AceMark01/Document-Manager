@@ -14,6 +14,7 @@ interface EmailShareDialogProps {
   onOpenChange: (open: boolean) => void
   emailData: {
     to: string
+    cc: string // Add this
     name: string
     subject: string
     message: string
@@ -21,6 +22,7 @@ interface EmailShareDialogProps {
   setEmailData: React.Dispatch<
     React.SetStateAction<{
       to: string
+      cc: string // Add this
       name: string
       subject: string
       message: string
@@ -35,6 +37,7 @@ interface EmailShareDialogProps {
   }>
   onShare: (emailData: {
     to: string
+    cc: string // Add this
     name: string
     subject: string
     message: string
@@ -111,6 +114,20 @@ export function EmailShareDialog({
                 className="border-gray-300 focus:border-[#5477F6] focus:ring-[#5477F6]"
               />
             </div>
+
+            {/* Add CC input field */}
+            <div className="space-y-2">
+              <Label htmlFor="cc">CC (Optional)</Label>
+              <Input
+                id="cc"
+                placeholder="Enter CC email address"
+                type="email"
+                value={emailData.cc || ""}
+                onChange={(e) => setEmailData({ ...emailData, cc: e.target.value })}
+                className="border-gray-300 focus:border-[#5477F6] focus:ring-[#5477F6]"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="subject">Subject*</Label>
               <Input
@@ -144,7 +161,7 @@ export function EmailShareDialog({
                 {selectedDocuments.map((doc) => (
                   <li key={doc.id} className="text-sm flex items-center">
                     <FileText className="h-3 w-3 mr-2 text-gray-500 flex-shrink-0" />
-                    <span className="truncate">{doc.name} ({doc.serialNo})</span>
+                    <span className="truncate">{doc.name}</span>
                   </li>
                 ))}
               </ul>

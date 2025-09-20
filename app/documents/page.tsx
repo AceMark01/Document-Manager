@@ -774,67 +774,72 @@ const filteredDocuments = documents
       setShareMethod("both");
     };
 
-    const handleShareEmail = async (emailData: {
-      to: string;
-      name: string;
-      subject: string;
-      message: string;
-    }) => {
-      try {
-        setIsLoading(true);
+const handleShareEmail = async (emailData: {
+  to: string;
+  cc: string; // Add this
+  name: string;
+  subject: string;
+  message: string;
+}) => {
+  try {
+    setIsLoading(true);
 
-        // Create FormData
-        const formData = new FormData();
-        formData.append("action", "shareViaEmail");
-        formData.append("recipientEmail", emailData.to);
-        formData.append("recipientName", emailData.name || "");
-        formData.append("subject", emailData.subject);
-        formData.append("message", emailData.message);
-        formData.append(
-          "documents",
-          JSON.stringify(
-            selectedDocuments.map((doc) => ({
-              id: doc.id.toString(),
-              name: doc.name,
-              serialNo: doc.serialNo,
-              documentType: doc.documentType,
-              category: doc.category,
-              imageUrl: doc.imageUrl,
-              sourceSheet: doc.sourceSheet,
-            }))
-          )
-        );
+    // Create FormData
+    const formData = new FormData();
+    formData.append("action", "shareViaEmail");
+    formData.append("recipientEmail", emailData.to);
+    formData.append("recipientName", emailData.name || "");
+    formData.append("subject", emailData.subject);
+    formData.append("message", emailData.message);
+    // Add CC field
+    if (emailData.cc) {
+      formData.append("cc", emailData.cc);
+    }
+    formData.append(
+      "documents",
+      JSON.stringify(
+        selectedDocuments.map((doc) => ({
+          id: doc.id.toString(),
+          name: doc.name,
+          serialNo: doc.serialNo,
+          documentType: doc.documentType,
+          category: doc.category,
+          imageUrl: doc.imageUrl,
+          sourceSheet: doc.sourceSheet,
+        }))
+      )
+    );
 
-        const response = await fetch(
-          "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec",
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
-
-        const textResponse = await response.text();
-        console.log("Full response:", textResponse);
-
-        // Just assume success if we get any response
-        toast({
-          title: "Success",
-          description: "Email sent successfully!",
-        });
-        setSelectedDocs([]);
-        return true;
-      } catch (error) {
-        console.error("Error sending email:", error);
-        toast({
-          title: "Error",
-          description: "Network error. Please check your connection.",
-          variant: "destructive",
-        });
-        return false;
-      } finally {
-        setIsLoading(false);
+    const response = await fetch(
+      "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec",
+      {
+        method: "POST",
+        body: formData,
       }
-    };
+    );
+
+    const textResponse = await response.text();
+    console.log("Full response:", textResponse);
+
+    // Just assume success if we get any response
+    toast({
+      title: "Success",
+      description: "Email sent successfully!",
+    });
+    setSelectedDocs([]);
+    return true;
+  } catch (error) {
+    console.error("Error sending email:", error);
+    toast({
+      title: "Error",
+      description: "Network error. Please check your connection.",
+      variant: "destructive",
+    });
+    return false;
+  } finally {
+    setIsLoading(false);
+  }
+};
 
 const handleShareWhatsApp = async (number: string) => {
   try {

@@ -30,6 +30,7 @@ interface SharedDocument {
   email: string;
   mobileNumber: string;
   imageUrl?: string;
+  ccEmail: string;
 }
 
 export default function SharedPage() {
@@ -111,6 +112,7 @@ export default function SharedPage() {
                 email: row[1] || "No Email",
                 mobileNumber: row[10] || "No Mobile", // Added mobile number from column K (index 10)
                 imageUrl: row[7] || undefined,
+                ccEmail : row[11] || "N/A",
               };
             })
             .sort((a, b) => b.rawTimestamp.getTime() - a.rawTimestamp.getTime());
@@ -197,8 +199,7 @@ export default function SharedPage() {
                         {doc.documentName}
                       </p>
                       <p className="text-xs md:text-sm text-[#7569F6]/70 truncate">
-                        {doc.category} • {doc.serialNo} • {doc.timestamp} •{" "}
-                        {doc.recipientName}
+                        {doc.category} • {doc.serialNo} • {doc.timestamp} • CC : {doc.ccEmail}
                       </p>
                       <div className="flex items-center mt-1 flex-wrap gap-1">
                         <Badge className="bg-[#5477F6]/10 text-[#5477F6] text-xs mr-2">

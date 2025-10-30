@@ -697,6 +697,10 @@ export default function DocumentsList() {
         updatedImageUrl = await uploadFileToGoogleDrive(tempDocImage);
       }
 
+      // Format renewal date properly for sheet
+      const formattedRenewalDate = tempRenewalDate ?
+        formatDateToDDMMYYYY(tempRenewalDate.toISOString()) : "";
+
       const formData = new FormData();
       formData.append("action", "updateDocument");
       formData.append("sheetName", docToUpdate.sourceSheet);
@@ -705,11 +709,18 @@ export default function DocumentsList() {
       formData.append("personName", tempPersonName);
       formData.append("imageUrl", updatedImageUrl);
 
-      console.log("Sending update request with:", {
+      // ✅ Renewal data - Column J (Renewal Date) ke liye
+      formData.append("renewalDate", formattedRenewalDate);
+      // ✅ Needs Renewal ko sirf "Renewal" bhejna hai (Column I)
+      formData.append("needsRenewal", tempNeedsRenewal ? "Renewal" : "");
+
+      console.log("Sending update request with renewal data:", {
         sheetName: docToUpdate.sourceSheet,
         serialNo: docToUpdate.serialNo,
         documentName: tempDocName,
-        personName: tempPersonName
+        personName: tempPersonName,
+        renewalDate: formattedRenewalDate,
+        needsRenewal: tempNeedsRenewal ? "Renewal" : ""
       });
 
       const response = await fetch(
@@ -721,7 +732,7 @@ export default function DocumentsList() {
       );
 
       const result = await response.json();
-      console.log("Server response:", result); // ✅ Debugging ke liye
+      console.log("Server response:", result);
 
       if (result.success) {
         setDocuments(prevDocs =>
@@ -732,6 +743,8 @@ export default function DocumentsList() {
                 name: tempDocName,
                 personName: tempPersonName,
                 imageUrl: updatedImageUrl,
+                needsRenewal: tempNeedsRenewal,
+                renewalDate: formattedRenewalDate
               }
               : doc
           )
@@ -756,6 +769,8 @@ export default function DocumentsList() {
       setTempDocName("");
       setTempPersonName("");
       setTempDocImage(null);
+      setTempNeedsRenewal(false);
+      setTempRenewalDate(undefined);
       setIsLoading(false);
     }
   };
@@ -764,8 +779,11 @@ export default function DocumentsList() {
   const handleCancelEdit = () => {
     setEditingDocId(null);
     setTempDocName("");
-    setTempPersonName(""); // NEW
+    setTempPersonName("");
     setTempDocImage(null);
+    // YEH NAYA CODE HAI - Renewal values reset karen
+    setTempNeedsRenewal(false);
+    setTempRenewalDate(undefined);
   };
 
 
@@ -815,11 +833,17 @@ export default function DocumentsList() {
 
   const handleEditClick = (doc: Document) => {
     setEditingDocId(doc.id);
-    setTempDocName(doc.name); // ✅ Document name (pehle doc.personName tha)
-    setTempPersonName(doc.personName); // Person name
+    setTempDocName(doc.name);
+    setTempPersonName(doc.personName);
     setTempDocImage(null);
+    // YEH NAYA CODE HAI - Renewal values set karen
+    setTempNeedsRenewal(doc.needsRenewal);
+    setTempRenewalDate(
+      doc.renewalDate
+        ? new Date(doc.renewalDate.split("/").reverse().join("-"))
+        : undefined
+    );
   };
-
 
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, docId: number) => {
@@ -1275,6 +1299,7 @@ export default function DocumentsList() {
                     <TableHead className="w-12 hidden lg:table-cell p-2 md:p-4">
                       Image
                     </TableHead>
+
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1429,6 +1454,33 @@ export default function DocumentsList() {
                                       className="text-xs"
                                     />
                                   </div>
+
+                                  {/* RENEWAL EDIT SECTION - YEH NAYA CODE HAI */}
+                                  <div className="border-t pt-2 mt-2">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Checkbox
+                                        id={`needsRenewal-${doc.id}`}
+                                        checked={tempNeedsRenewal}
+                                        onCheckedChange={(checked: boolean) => {
+                                          setTempNeedsRenewal(checked);
+                                          if (!checked) setTempRenewalDate(undefined);
+                                        }}
+                                        className="border-indigo-300"
+                                      />
+                                      <label htmlFor={`needsRenewal-${doc.id}`} className="text-xs font-medium">
+                                        Renewal
+                                      </label>
+                                    </div>
+                                    {tempNeedsRenewal && (
+                                      <DatePicker
+                                        value={tempRenewalDate}
+                                        onChange={(date) => setTempRenewalDate(date)}
+                                        placeholder="Select renewal date"
+                                        className="h-8 text-xs w-full"
+                                      />
+                                    )}
+                                  </div>
+
                                   <div className="flex gap-1">
                                     <Button
                                       variant="outline"
@@ -1458,6 +1510,8 @@ export default function DocumentsList() {
                                   <div className="md:hidden text-xs text-gray-500 truncate">
                                     {doc.serialNo} • {doc.category} • {doc.company}
                                   </div>
+
+
                                 </div>
                               )}
                             </div>
@@ -1475,10 +1529,10 @@ export default function DocumentsList() {
                         <TableCell className="hidden md:table-cell p-2 md:p-4">
                           <Badge
                             className={`${doc.category === "Personal"
-                                ? "bg-indigo-100 text-indigo-800"
-                                : doc.category === "Company"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-purple-100 text-purple-800"
+                              ? "bg-indigo-100 text-indigo-800"
+                              : doc.category === "Company"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-purple-100 text-purple-800"
                               }`}
                           >
                             {doc.category || "N/A"}
@@ -1546,15 +1600,15 @@ export default function DocumentsList() {
                             <div className="flex items-center">
                               <Badge
                                 className={`flex items-center gap-1 ${isDatePastToday(doc.renewalDate)
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-amber-100 text-amber-800"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-amber-100 text-amber-800"
                                   }`}
                               >
                                 <RefreshCw className="h-3 w-3" />
                                 <span
                                   className={`font-mono text-xs ${isDatePastToday(doc.renewalDate)
-                                      ? "text-red-600"
-                                      : ""
+                                    ? "text-red-600"
+                                    : ""
                                     }`}
                                 >
                                   {doc.renewalDate || "Required"}
@@ -1624,10 +1678,10 @@ export default function DocumentsList() {
               >
                 <div
                   className={`p-3 border-l-4 ${doc.category === "Personal"
-                      ? "border-l-indigo-500"
-                      : doc.category === "Company"
-                        ? "border-l-blue-500"
-                        : "border-l-purple-500"
+                    ? "border-l-indigo-500"
+                    : doc.category === "Company"
+                      ? "border-l-blue-500"
+                      : "border-l-purple-500"
                     } flex items-center justify-between`}
                 >
                   <div className="flex items-center min-w-0">
@@ -1758,15 +1812,15 @@ export default function DocumentsList() {
                             doc.needsRenewal && (
                               <Badge
                                 className={`mt-1 text-xs flex items-center gap-1 w-fit ${isDatePastToday(doc.renewalDate)
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-amber-100 text-amber-800"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-amber-100 text-amber-800"
                                   }`}
                               >
                                 <RefreshCw className="h-3 w-3" />
                                 <span
                                   className={`font-mono ${isDatePastToday(doc.renewalDate)
-                                      ? "text-red-600"
-                                      : ""
+                                    ? "text-red-600"
+                                    : ""
                                     }`}
                                 >
                                   {doc.renewalDate || "Required"}

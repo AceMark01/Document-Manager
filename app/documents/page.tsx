@@ -81,6 +81,10 @@ interface Document {
   mobile: string;
   sourceSheet: string;
   isDeleted: boolean;
+  // NEW: Additional image URLs
+  image2Url: string;
+  image3Url: string;
+  image4Url: string;
 }
 
 type DocumentFilter = "All" | "Personal" | "Company" | "Director" | "Renewal";
@@ -235,12 +239,11 @@ export default function DocumentsList() {
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
-
   const [editingDocId, setEditingDocId] = useState<number | null>(null);
   const [tempDocName, setTempDocName] = useState("");
   const [tempDocImage, setTempDocImage] = useState<File | null>(null);
 
-  const [tempPersonName, setTempPersonName] = useState(""); // NEW
+  const [tempPersonName, setTempPersonName] = useState("");
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -292,41 +295,36 @@ export default function DocumentsList() {
       // Process document types from Master sheet
       if (masterData.success && masterData.data) {
         const types = masterData.data
-          .slice(1) // Skip header row
-          .map((row: any[]) => row[0]) // Column A contains document types
-          .filter((type: string) => type) // Remove empty values
+          .slice(1)
+          .map((row: any[]) => row[0])
+          .filter((type: string) => type)
           .filter((value: string, index: number, self: string[]) =>
-            self.indexOf(value) === index // Remove duplicates
+            self.indexOf(value) === index
           );
         setDocumentTypes(types);
       }
+      
       let allDocs: Document[] = [];
-      const serialNoMap = new Map<string, Document>(); // To track duplicates by serialNo
+      const serialNoMap = new Map<string, Document>();
 
       // Helper function to process and merge documents
       const processDocument = (doc: Document) => {
         if (!doc.serialNo) {
-          // If no serialNo, just add it
           allDocs.push(doc);
           return;
         }
 
         const existingDoc = serialNoMap.get(doc.serialNo);
         if (existingDoc) {
-          // Merge with existing document, preferring newer data
           const existingDate = new Date(existingDoc.timestamp);
           const newDate = new Date(doc.timestamp);
 
           if (newDate > existingDate) {
-            // If the new document is more recent, merge it with the existing one
             const mergedDoc: Document = {
               ...existingDoc,
               ...doc,
-              // Keep the most recent timestamp
               timestamp: doc.timestamp,
-              // Combine tags
               tags: [...new Set([...existingDoc.tags, ...doc.tags])],
-              // Prefer non-empty values from the newer document
               name: doc.name || existingDoc.name,
               documentType: doc.documentType || existingDoc.documentType,
               category: doc.category || existingDoc.category,
@@ -337,9 +335,11 @@ export default function DocumentsList() {
               imageUrl: doc.imageUrl || existingDoc.imageUrl,
               email: doc.email || existingDoc.email,
               mobile: doc.mobile || existingDoc.mobile,
+              image2Url: doc.image2Url || existingDoc.image2Url,
+              image3Url: doc.image3Url || existingDoc.image3Url,
+              image4Url: doc.image4Url || existingDoc.image4Url,
             };
 
-            // Update the map and array
             serialNoMap.set(doc.serialNo, mergedDoc);
             const index = allDocs.findIndex((d) => d.id === existingDoc.id);
             if (index !== -1) {
@@ -347,13 +347,12 @@ export default function DocumentsList() {
             }
           }
         } else {
-          // Add new document to map and array
           serialNoMap.set(doc.serialNo, doc);
           allDocs.push(doc);
         }
       };
 
-      // Process Documents sheet
+      // Process Documents sheet - UPDATED to get additional images
       if (documentsData.success && documentsData.data) {
         const documentsSheetData = documentsData.data
           .slice(1)
@@ -382,11 +381,15 @@ export default function DocumentsList() {
               personName: doc[7] || "",
               needsRenewal: doc[8] === "TRUE" || doc[8] === "Yes" || false,
               renewalDate: formatDateToDDMMYYYY(doc[9] || ""),
-              imageUrl: doc[11] || "",
+              imageUrl: doc[11] || "", // Column L - Image1
               email: doc[12] || "",
               mobile: doc[13] ? String(doc[13]) : "",
               sourceSheet: "Documents",
               isDeleted: isDeleted,
+              // NEW: Fetch additional images based on your header
+              image2Url: doc[17] || "", // Column R - Image2
+              image3Url: doc[18] || "", // Column S - Image3
+              image4Url: doc[19] || "", // Column T - Image4
             };
           })
           .filter((doc) => !doc.isDeleted);
@@ -394,7 +397,7 @@ export default function DocumentsList() {
         documentsSheetData.forEach(processDocument);
       }
 
-      // Process Updated Renewal sheet
+      // Process Updated Renewal sheet - UPDATED to get additional images
       if (renewalsData.success && renewalsData.data) {
         const renewalDocs = renewalsData.data
           .slice(1)
@@ -441,11 +444,15 @@ export default function DocumentsList() {
               personName: doc[10] || "",
               needsRenewal: needsRenewal,
               renewalDate: renewalDate,
-              imageUrl: doc[13] || "",
+              imageUrl: doc[13] || "", // Column N - Image1 (in Renewal sheet)
               email: doc[11] || "",
               mobile: doc[12] ? String(doc[12]) : "",
               sourceSheet: "Updated Renewal",
               isDeleted: isDeleted,
+              // NEW: Fetch additional images for Renewal sheet
+              image2Url: doc[14] || "", // Column O - Image2
+              image3Url: doc[15] || "", // Column P - Image3
+              image4Url: doc[16] || "", // Column Q - Image4
             };
           })
           .filter((doc) => !doc.isDeleted);
@@ -457,8 +464,8 @@ export default function DocumentsList() {
         (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
 
-      // Assign sequential IDs based on the sorted order to maintain consistency
       allDocs = allDocs.map((doc, index) => ({ ...doc, id: index + 1 }));
+      
       // If user is admin, show all documents
       if (userRole && userRole.toString().toLowerCase() === "admin") {
         setDocuments(allDocs);
@@ -506,7 +513,7 @@ export default function DocumentsList() {
       formData.append("sheetName", docToDelete.sourceSheet);
       formData.append("serialNo", docToDelete.serialNo);
       formData.append("timestamp", docToDelete.timestamp);
-      formData.append("deletionMarker", "DELETED"); // Explicitly send the deletion marker
+      formData.append("deletionMarker", "DELETED");
 
       const response = await fetch(
         "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec",
@@ -617,7 +624,7 @@ export default function DocumentsList() {
       formData.append("mobile", docToUpdate.mobile);
       formData.append("imageUrl", docToUpdate.imageUrl);
       formData.append("originalSerialNo", docToUpdate.serialNo);
-      formData.append("timestamp", new Date().toISOString()); // Current timestamp for new entries
+      formData.append("timestamp", new Date().toISOString());
 
       const response = await fetch(
         "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec",
@@ -636,7 +643,7 @@ export default function DocumentsList() {
           needsRenewal: tempNeedsRenewal,
           renewalDate: formattedDate,
           serialNo: result.newSerialNo || docToUpdate.serialNo,
-          timestamp: new Date().toISOString(), // Update timestamp to now
+          timestamp: new Date().toISOString(),
         };
 
         // Remove the old document and add the updated one at the top
@@ -709,9 +716,8 @@ export default function DocumentsList() {
       formData.append("personName", tempPersonName);
       formData.append("imageUrl", updatedImageUrl);
 
-      // ✅ Renewal data - Column J (Renewal Date) ke liye
+      // Renewal data
       formData.append("renewalDate", formattedRenewalDate);
-      // ✅ Needs Renewal ko sirf "Renewal" bhejna hai (Column I)
       formData.append("needsRenewal", tempNeedsRenewal ? "Renewal" : "");
 
       console.log("Sending update request with renewal data:", {
@@ -775,17 +781,14 @@ export default function DocumentsList() {
     }
   };
 
-
   const handleCancelEdit = () => {
     setEditingDocId(null);
     setTempDocName("");
     setTempPersonName("");
     setTempDocImage(null);
-    // YEH NAYA CODE HAI - Renewal values reset karen
     setTempNeedsRenewal(false);
     setTempRenewalDate(undefined);
   };
-
 
   const uploadFileToGoogleDrive = async (file: File): Promise<string> => {
     const scriptUrl = "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec";
@@ -836,7 +839,6 @@ export default function DocumentsList() {
     setTempDocName(doc.name);
     setTempPersonName(doc.personName);
     setTempDocImage(null);
-    // YEH NAYA CODE HAI - Renewal values set karen
     setTempNeedsRenewal(doc.needsRenewal);
     setTempRenewalDate(
       doc.renewalDate
@@ -844,7 +846,6 @@ export default function DocumentsList() {
         : undefined
     );
   };
-
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, docId: number) => {
     if (e.target.files && e.target.files[0]) {
@@ -947,10 +948,10 @@ export default function DocumentsList() {
     );
 
     setEmailData({
-      to: firstSelectedDoc?.email || "",
-      name: firstSelectedDoc?.personName || "",
-      subject: `Document: ${firstSelectedDoc?.name || ""}`,
-      message: `Please find attached the document "${firstSelectedDoc?.name || ""}" (Serial No: ${firstSelectedDoc?.serialNo || ""}).`,
+      to: "",
+      name: "",
+      subject: "",
+      message: "",
     });
     setWhatsappNumber(firstSelectedDoc?.mobile || "");
     setShareMethod("both");
@@ -958,7 +959,7 @@ export default function DocumentsList() {
 
   const handleShareEmail = async (emailData: {
     to: string;
-    cc: string; // Add this
+    cc: string;
     name: string;
     subject: string;
     message: string;
@@ -987,6 +988,9 @@ export default function DocumentsList() {
             documentType: doc.documentType,
             category: doc.category,
             imageUrl: doc.imageUrl,
+            image2Url: doc.image2Url,
+            image3Url: doc.image3Url,
+            image4Url: doc.image4Url,
             sourceSheet: doc.sourceSheet,
           }))
         )
@@ -1033,7 +1037,7 @@ export default function DocumentsList() {
       // Create FormData
       const formData = new FormData();
       formData.append("action", "shareViaWhatsApp");
-      formData.append("recipientNumber", formattedNumber); // Use the formatted number
+      formData.append("recipientNumber", formattedNumber);
 
       // Include all document details plus the recipient number
       const documentsData = selectedDocuments.map((doc) => ({
@@ -1043,10 +1047,13 @@ export default function DocumentsList() {
         documentType: doc.documentType,
         category: doc.category,
         imageUrl: doc.imageUrl,
+        image2Url: doc.image2Url,
+        image3Url: doc.image3Url,
+        image4Url: doc.image4Url,
         sourceSheet: doc.sourceSheet,
-        mobile: formattedNumber, // Explicitly include the formatted number
-        recipientNumber: formattedNumber, // Include again for backward compatibility
-        originalMobile: doc.mobile || '' // Include original if exists
+        mobile: formattedNumber,
+        recipientNumber: formattedNumber,
+        originalMobile: doc.mobile || ''
       }));
 
       formData.append("documents", JSON.stringify(documentsData));
@@ -1296,10 +1303,9 @@ export default function DocumentsList() {
                     <TableHead className="min-w-[180px] hidden md:table-cell p-2 md:p-4">
                       Renewal
                     </TableHead>
-                    <TableHead className="w-12 hidden lg:table-cell p-2 md:p-4">
-                      Image
+                    <TableHead className="w-24 hidden lg:table-cell p-2 md:p-4">
+                      Images
                     </TableHead>
-
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1455,7 +1461,7 @@ export default function DocumentsList() {
                                     />
                                   </div>
 
-                                  {/* RENEWAL EDIT SECTION - YEH NAYA CODE HAI */}
+                                  {/* RENEWAL EDIT SECTION */}
                                   <div className="border-t pt-2 mt-2">
                                     <div className="flex items-center gap-2 mb-2">
                                       <Checkbox
@@ -1510,8 +1516,6 @@ export default function DocumentsList() {
                                   <div className="md:hidden text-xs text-gray-500 truncate">
                                     {doc.serialNo} • {doc.category} • {doc.company}
                                   </div>
-
-
                                 </div>
                               )}
                             </div>
@@ -1538,9 +1542,6 @@ export default function DocumentsList() {
                             {doc.category || "N/A"}
                           </Badge>
                         </TableCell>
-                        {/* <TableCell className="hidden md:table-cell p-2 md:p-4">
-                              {doc.company || "-"}
-                            </TableCell> */}
                         <TableCell className="hidden md:table-cell p-2 md:p-4">
                           {doc.personName || "-"}
                         </TableCell>
@@ -1620,13 +1621,55 @@ export default function DocumentsList() {
                           )}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell p-2 md:p-4">
-                          <a
-                            href={doc.imageUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <ImageIcon className="h-5 w-5 mr-1 text-indigo-600" />
-                          </a>
+                          <div className="flex flex-wrap gap-1">
+                            {doc.imageUrl && (
+                              <a
+                                href={doc.imageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-block"
+                                title="Image 1"
+                              >
+                                <ImageIcon className="h-5 w-5 text-indigo-600 hover:text-indigo-800" />
+                              </a>
+                            )}
+                            {doc.image2Url && (
+                              <a
+                                href={doc.image2Url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-block"
+                                title="Image 2"
+                              >
+                                <ImageIcon className="h-5 w-5 text-blue-600 hover:text-blue-800" />
+                              </a>
+                            )}
+                            {doc.image3Url && (
+                              <a
+                                href={doc.image3Url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-block"
+                                title="Image 3"
+                              >
+                                <ImageIcon className="h-5 w-5 text-green-600 hover:text-green-800" />
+                              </a>
+                            )}
+                            {doc.image4Url && (
+                              <a
+                                href={doc.image4Url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-block"
+                                title="Image 4"
+                              >
+                                <ImageIcon className="h-5 w-5 text-purple-600 hover:text-purple-800" />
+                              </a>
+                            )}
+                            {!doc.imageUrl && !doc.image2Url && !doc.image3Url && !doc.image4Url && (
+                              <span className="text-xs text-gray-400">No images</span>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -1828,19 +1871,48 @@ export default function DocumentsList() {
                               </Badge>
                             )
                           )}
-                          {doc.imageUrl && (
-                            <button
-                              onClick={() => window.open(doc.imageUrl, "_blank")}
-                              className="mt-1 flex items-center text-xs text-indigo-500"
-                            >
-                              <ImageIcon className="h-3 w-3 mr-1" />
-                              View Image
-                            </button>
-                          )}
+                          {/* Mobile view for multiple images */}
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {doc.imageUrl && (
+                              <button
+                                onClick={() => window.open(doc.imageUrl, "_blank")}
+                                className="flex items-center text-xs text-indigo-500"
+                              >
+                                <ImageIcon className="h-3 w-3 mr-1" />
+                                Img1
+                              </button>
+                            )}
+                            {doc.image2Url && (
+                              <button
+                                onClick={() => window.open(doc.image2Url, "_blank")}
+                                className="flex items-center text-xs text-blue-500"
+                              >
+                                <ImageIcon className="h-3 w-3 mr-1" />
+                                Img2
+                              </button>
+                            )}
+                            {doc.image3Url && (
+                              <button
+                                onClick={() => window.open(doc.image3Url, "_blank")}
+                                className="flex items-center text-xs text-green-500"
+                              >
+                                <ImageIcon className="h-3 w-3 mr-1" />
+                                Img3
+                              </button>
+                            )}
+                            {doc.image4Url && (
+                              <button
+                                onClick={() => window.open(doc.image4Url, "_blank")}
+                                className="flex items-center text-xs text-purple-500"
+                              >
+                                <ImageIcon className="h-3 w-3 mr-1" />
+                                Img4
+                              </button>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
-
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -1873,10 +1945,10 @@ export default function DocumentsList() {
                                 setSelectedDocs([doc.id]);
                               }
                               setEmailData({
-                                to: doc.email || "",
-                                name: doc.personName || "",
-                                subject: `Document: ${doc.name}`,
-                                message: `Please find attached the document "${doc.name}" (Serial No: ${doc.serialNo}).`,
+                                to: "",
+                                name: "",
+                                subject: "",
+                                message: "",
                               });
                               setShareMethod("email");
                             }}
@@ -1904,10 +1976,10 @@ export default function DocumentsList() {
                                 setSelectedDocs([doc.id]);
                               }
                               setEmailData({
-                                to: doc.email || "",
-                                name: doc.personName || "",
-                                subject: `Document: ${doc.name}`,
-                                message: `Please find attached the document "${doc.name}" (Serial No: ${doc.serialNo}).`,
+                                to: "",
+                                name: "",
+                                subject: "",
+                                message: "",
                               });
                               setWhatsappNumber(doc.mobile || "");
                               setShareMethod("both");

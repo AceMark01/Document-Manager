@@ -74,6 +74,9 @@ interface Document {
   imageUrl: string;
   email: string;
   mobile: string;
+  image2Url: string;
+  image3Url: string;
+  image4Url: string;
 }
 
 const formatDateToDDMMYYYY = (dateString: string): string => {
@@ -151,9 +154,9 @@ const formatDateTimeDisplay = (dateString: string): string => {
         .getHours()
         .toString()
         .padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now
-        .getSeconds()
-        .toString()
-        .padStart(2, "0")}`;
+          .getSeconds()
+          .toString()
+          .padStart(2, "0")}`;
     }
 
     return `${day}/${month}/${year}`;
@@ -250,7 +253,7 @@ const handleDownloadDocument = (imageUrl: string, documentName: string) => {
   link.setAttribute(
     "download",
     `${documentName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.jpg` ||
-      "document.jpg"
+    "document.jpg"
   );
   document.body.appendChild(link);
   link.click();
@@ -459,21 +462,21 @@ export default function DocumentsList() {
     }
   };
 
-useEffect(() => {
-  if (!isLoggedIn) {
-    router.push("/login");
-    return;
-  }
-  setMounted(true);
-  fetchDocuments(); // Always fetch on mount if logged in
-}, [isLoggedIn, router]);
+  useEffect(() => {
+    if (!isLoggedIn) {
+      router.push("/login");
+      return;
+    }
+    setMounted(true);
+    fetchDocuments(); // Always fetch on mount if logged in
+  }, [isLoggedIn, router]);
 
 
   const fetchDocuments = async () => {
-  // Only show loading if it's the initial load
-  if (documents.length === 0) {
-    setIsLoading(true);
-  }
+    // Only show loading if it's the initial load
+    if (documents.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const docsResponse = await fetch(
         "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec?sheet=Documents"
@@ -500,13 +503,16 @@ useEffect(() => {
             company: doc[5] || "",
             tags: doc[6]
               ? String(doc[6])
-                  .split(",")
-                  .map((tag: string) => tag.trim())
+                .split(",")
+                .map((tag: string) => tag.trim())
               : [],
             personName: doc[7] || "",
             needsRenewal: doc[8] === "TRUE" || doc[8] === "Yes" || false,
             renewalDate: formatDateToDDMMYYYY(doc[9] || ""),
             imageUrl: doc[11] || "",
+            image2Url: doc[17] || "",
+            image3Url: doc[18] || "",
+            image4Url: doc[19] || "",
             email: doc[12] || "",
             mobile: doc[13] ? String(doc[13]) : "",
           }))
@@ -531,8 +537,8 @@ useEffect(() => {
         variant: "destructive",
       });
     } finally {
-    setIsLoading(false);
-  }
+      setIsLoading(false);
+    }
   };
 
   const handleImageUpload = async (file: File) => {
@@ -635,16 +641,15 @@ useEffect(() => {
       // Format the date as DD/MM/YYYY
       const formattedDate = tempRenewalDate
         ? `${tempRenewalDate.getDate().toString().padStart(2, "0")}/${(
-            tempRenewalDate.getMonth() + 1
-          )
-            .toString()
-            .padStart(2, "0")}/${tempRenewalDate.getFullYear()}`
+          tempRenewalDate.getMonth() + 1
+        )
+          .toString()
+          .padStart(2, "0")}/${tempRenewalDate.getFullYear()}`
         : "";
 
       // Combine date and time in the format "DD/MM/YYYY HH:mm"
-      const renewalDateTime = `${formattedDate}${
-        tempRenewalTime ? " " + tempRenewalTime : ""
-      }`;
+      const renewalDateTime = `${formattedDate}${tempRenewalTime ? " " + tempRenewalTime : ""
+        }`;
 
       const formData = new FormData();
       formData.append("action", "updateRenewal");
@@ -676,12 +681,12 @@ useEffect(() => {
           .map((doc) =>
             doc.id === editingRenewalDoc.id
               ? {
-                  ...doc,
-                  needsRenewal: tempNeedsRenewal,
-                  renewalDate: renewalDateTime,
-                  imageUrl: newImageUrl || doc.imageUrl,
-                  timestamp: new Date().toISOString(),
-                }
+                ...doc,
+                needsRenewal: tempNeedsRenewal,
+                renewalDate: renewalDateTime,
+                imageUrl: newImageUrl || doc.imageUrl,
+                timestamp: new Date().toISOString(),
+              }
               : doc
           )
           .sort(
@@ -835,17 +840,17 @@ useEffect(() => {
     );
   };
 
-const handleFilterChange = (value: DocumentFilter) => {
-  setCurrentFilter(value);
-  const newSearchParams = new URLSearchParams(searchParams.toString());
-  if (value === "All") {
-    newSearchParams.delete("filter");
-  } else {
-    newSearchParams.set("filter", value);
-  }
-  router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-  // No loading state change here
-};
+  const handleFilterChange = (value: DocumentFilter) => {
+    setCurrentFilter(value);
+    const newSearchParams = new URLSearchParams(searchParams.toString());
+    if (value === "All") {
+      newSearchParams.delete("filter");
+    } else {
+      newSearchParams.set("filter", value);
+    }
+    router.replace(`?${newSearchParams.toString()}`, { scroll: false });
+    // No loading state change here
+  };
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -1011,16 +1016,15 @@ const handleFilterChange = (value: DocumentFilter) => {
                       <div className="flex items-center gap-2">
                         <label
                           htmlFor="documentImage"
-                          className={`text-sm font-medium ${
-                            !tempImageUrl ? "text-red-600" : "text-[#7569F6]"
-                          } cursor-pointer hover:text-[#935DF6] flex items-center gap-1 border border-input rounded-md px-3 py-2`}
+                          className={`text-sm font-medium ${!tempImageUrl ? "text-red-600" : "text-[#7569F6]"
+                            } cursor-pointer hover:text-[#935DF6] flex items-center gap-1 border border-input rounded-md px-3 py-2`}
                         >
                           <ImageIcon className="h-4 w-4" />
                           {uploadingImage
                             ? "Uploading..."
                             : tempImageUrl
-                            ? "Change Image"
-                            : "Upload Image*"}
+                              ? "Change Image"
+                              : "Upload Image*"}
                         </label>
                         <input
                           id="documentImage"
@@ -1109,7 +1113,7 @@ const handleFilterChange = (value: DocumentFilter) => {
             <Select
               onValueChange={handleFilterChange}
               value={currentFilter}
-              // No disabled state (filters work instantly)
+            // No disabled state (filters work instantly)
             >
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by" />
@@ -1152,10 +1156,10 @@ const handleFilterChange = (value: DocumentFilter) => {
                     {currentFilter === "Renewal"
                       ? "Documents Needing Renewal"
                       : currentFilter === "Overdue"
-                      ? "Overdue Renewals"
-                      : currentFilter === "Today"
-                      ? "Renewals Due Today"
-                      : "Upcoming Renewals"}
+                        ? "Overdue Renewals"
+                        : currentFilter === "Today"
+                          ? "Renewals Due Today"
+                          : "Upcoming Renewals"}
                   </CardTitle>
                   {currentFilter === "Renewal" && (
                     <div className="flex items-center gap-2">
@@ -1285,13 +1289,12 @@ const handleFilterChange = (value: DocumentFilter) => {
                             </TableCell>
                             <TableCell className="hidden md:table-cell p-2 md:p-4">
                               <Badge
-                                className={`${
-                                  doc.category === "Personal"
+                                className={`${doc.category === "Personal"
                                     ? "bg-[#7569F6]/10 text-[#7569F6]"
                                     : doc.category === "Company"
-                                    ? "bg-[#5477F6]/10 text-[#5477F6]"
-                                    : "bg-[#935DF6]/10 text-[#935DF6]"
-                                }`}
+                                      ? "bg-[#5477F6]/10 text-[#5477F6]"
+                                      : "bg-[#935DF6]/10 text-[#935DF6]"
+                                  }`}
                               >
                                 {doc.category || "N/A"}
                               </Badge>
@@ -1311,15 +1314,14 @@ const handleFilterChange = (value: DocumentFilter) => {
                               {doc.needsRenewal ? (
                                 <div className="flex items-center">
                                   <Badge
-                                    className={`${
-                                      getRenewalStatus(doc.renewalDate) ===
-                                      "overdue"
+                                    className={`${getRenewalStatus(doc.renewalDate) ===
+                                        "overdue"
                                         ? "bg-red-100 text-red-800" // Expired
                                         : getRenewalStatus(doc.renewalDate) ===
                                           "today"
-                                        ? "bg-yellow-100 text-yellow-800" // Today
-                                        : "bg-[#935DF6]/10 text-[#935DF6]" // Upcoming
-                                    } flex items-center gap-1`}
+                                          ? "bg-yellow-100 text-yellow-800" // Today
+                                          : "bg-[#935DF6]/10 text-[#935DF6]" // Upcoming
+                                      } flex items-center gap-1`}
                                   >
                                     <RefreshCw className="h-3 w-3" />
                                     <span className="font-mono text-xs">
@@ -1336,17 +1338,51 @@ const handleFilterChange = (value: DocumentFilter) => {
                               )}
                             </TableCell>
                             <TableCell className="hidden lg:table-cell p-2 md:p-4">
-                              {doc.imageUrl ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleViewImage(doc.imageUrl)}
-                                  className="text-[#5477F6] hover:underline"
-                                >
-                                  <ImageIcon className="h-5 w-5 mr-1" />
-                                </button>
-                              ) : (
-                                "-"
-                              )}
+                              <div className="flex flex-wrap gap-1">
+                                {doc.imageUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewImage(doc.imageUrl)}
+                                    className="inline-block"
+                                    title="Image 1"
+                                  >
+                                    <ImageIcon className="h-5 w-5 text-[#5477F6] hover:text-[#935DF6]" />
+                                  </button>
+                                )}
+                                {doc.image2Url && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewImage(doc.image2Url)}
+                                    className="inline-block"
+                                    title="Image 2"
+                                  >
+                                    <ImageIcon className="h-5 w-5 text-blue-600 hover:text-blue-800" />
+                                  </button>
+                                )}
+                                {doc.image3Url && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewImage(doc.image3Url)}
+                                    className="inline-block"
+                                    title="Image 3"
+                                  >
+                                    <ImageIcon className="h-5 w-5 text-green-600 hover:text-green-800" />
+                                  </button>
+                                )}
+                                {doc.image4Url && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewImage(doc.image4Url)}
+                                    className="inline-block"
+                                    title="Image 4"
+                                  >
+                                    <ImageIcon className="h-5 w-5 text-purple-600 hover:text-purple-800" />
+                                  </button>
+                                )}
+                                {!doc.imageUrl && !doc.image2Url && !doc.image3Url && !doc.image4Url && (
+                                  <span className="text-xs text-gray-400">No images</span>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -1396,13 +1432,12 @@ const handleFilterChange = (value: DocumentFilter) => {
                     className="shadow-sm overflow-hidden border-[#7569F6]/20"
                   >
                     <div
-                      className={`p-3 border-l-4 ${
-                        doc.category === "Personal"
+                      className={`p-3 border-l-4 ${doc.category === "Personal"
                           ? "border-l-[#7569F6]"
                           : doc.category === "Company"
-                          ? "border-l-[#5477F6]"
-                          : "border-l-[#935DF6]"
-                      }`}
+                            ? "border-l-[#5477F6]"
+                            : "border-l-[#935DF6]"
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center min-w-0">
@@ -1479,13 +1514,12 @@ const handleFilterChange = (value: DocumentFilter) => {
                         )}
                         {doc.needsRenewal && (
                           <Badge
-                            className={`${
-                              getRenewalStatus(doc.renewalDate) === "overdue"
+                            className={`${getRenewalStatus(doc.renewalDate) === "overdue"
                                 ? "bg-red-100 text-red-800" // Expired
                                 : getRenewalStatus(doc.renewalDate) === "today"
-                                ? "bg-yellow-100 text-yellow-800" // Today
-                                : "bg-[#935DF6]/10 text-[#935DF6]" // Upcoming
-                            } flex items-center gap-1 mt-2`}
+                                  ? "bg-yellow-100 text-yellow-800" // Today
+                                  : "bg-[#935DF6]/10 text-[#935DF6]" // Upcoming
+                              } flex items-center gap-1 mt-2`}
                           >
                             <RefreshCw className="h-3 w-3" />
                             <span className="font-mono text-xs">
@@ -1497,16 +1531,44 @@ const handleFilterChange = (value: DocumentFilter) => {
                             </span>
                           </Badge>
                         )}
-                        {doc.imageUrl && (
-                          <button
-                            type="button"
-                            onClick={() => handleViewImage(doc.imageUrl)}
-                            className="mt-1 flex items-center text-xs text-[#5477F6]"
-                          >
-                            <ImageIcon className="h-3 w-3 mr-1" />
-                            View Image
-                          </button>
-                        )}
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {doc.imageUrl && (
+                            <button
+                              onClick={() => handleViewImage(doc.imageUrl)}
+                              className="flex items-center text-xs text-[#5477F6]"
+                            >
+                              <ImageIcon className="h-3 w-3 mr-1" />
+                              Img1
+                            </button>
+                          )}
+                          {doc.image2Url && (
+                            <button
+                              onClick={() => handleViewImage(doc.image2Url)}
+                              className="flex items-center text-xs text-blue-500"
+                            >
+                              <ImageIcon className="h-3 w-3 mr-1" />
+                              Img2
+                            </button>
+                          )}
+                          {doc.image3Url && (
+                            <button
+                              onClick={() => handleViewImage(doc.image3Url)}
+                              className="flex items-center text-xs text-green-500"
+                            >
+                              <ImageIcon className="h-3 w-3 mr-1" />
+                              Img3
+                            </button>
+                          )}
+                          {doc.image4Url && (
+                            <button
+                              onClick={() => handleViewImage(doc.image4Url)}
+                              className="flex items-center text-xs text-purple-500"
+                            >
+                              <ImageIcon className="h-3 w-3 mr-1" />
+                              Img4
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </Card>

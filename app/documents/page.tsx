@@ -63,6 +63,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Document {
   id: number;
@@ -85,6 +89,7 @@ interface Document {
   image2Url: string;
   image3Url: string;
   image4Url: string;
+  subCategory: string;
 }
 
 type DocumentFilter = "All" | "Personal" | "Company" | "Director" | "Renewal";
@@ -170,6 +175,29 @@ const formatDateTimeDisplay = (dateString: string): string => {
   }
 };
 
+const formatImageUrl = (url: string): string => {
+  if (!url) return "";
+  if (url.includes("uc?export=view")) return url;
+
+  let fileId = "";
+  if (url.includes("drive.google.com/file/d/")) {
+    fileId = url.split("/file/d/")[1].split("/")[0];
+  } else if (url.includes("id=")) {
+    const matches = url.match(/[?&]id=([^&]+)/);
+    if (matches && matches[1]) {
+      fileId = matches[1];
+    }
+  } else if (url.length > 20 && !url.includes("/") && !url.includes(".")) {
+    // Likely a direct file ID
+    fileId = url;
+  }
+
+  if (fileId) {
+    return `https://drive.google.com/uc?export=view&id=${fileId}`;
+  }
+  return url;
+};
+
 const isDatePastToday = (dateString: string): boolean => {
   if (!dateString) return false;
 
@@ -230,6 +258,7 @@ export default function DocumentsList() {
   const [tempNeedsRenewal, setTempNeedsRenewal] = useState<boolean>(false);
   const [emailData, setEmailData] = useState({
     to: "",
+    cc: "",
     name: "",
     subject: "",
     message: "",
@@ -241,9 +270,15 @@ export default function DocumentsList() {
 
   const [editingDocId, setEditingDocId] = useState<number | null>(null);
   const [tempDocName, setTempDocName] = useState("");
-  const [tempDocImage, setTempDocImage] = useState<File | null>(null);
-
+  const [tempDocType, setTempDocType] = useState("");
+  const [tempCategory, setTempCategory] = useState("");
   const [tempPersonName, setTempPersonName] = useState("");
+  const [tempSubCategory, setTempSubCategory] = useState("");
+
+  const [tempDocImage, setTempDocImage] = useState<File | null>(null);
+  const [tempDocImage2, setTempDocImage2] = useState<File | null>(null);
+  const [tempDocImage3, setTempDocImage3] = useState<File | null>(null);
+  const [tempDocImage4, setTempDocImage4] = useState<File | null>(null);
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -303,7 +338,7 @@ export default function DocumentsList() {
           );
         setDocumentTypes(types);
       }
-      
+
       let allDocs: Document[] = [];
       const serialNoMap = new Map<string, Document>();
 
@@ -338,6 +373,7 @@ export default function DocumentsList() {
               image2Url: doc.image2Url || existingDoc.image2Url,
               image3Url: doc.image3Url || existingDoc.image3Url,
               image4Url: doc.image4Url || existingDoc.image4Url,
+              subCategory: doc.subCategory || existingDoc.subCategory,
             };
 
             serialNoMap.set(doc.serialNo, mergedDoc);
@@ -390,6 +426,7 @@ export default function DocumentsList() {
               image2Url: doc[17] || "", // Column R - Image2
               image3Url: doc[18] || "", // Column S - Image3
               image4Url: doc[19] || "", // Column T - Image4
+              subCategory: doc[15] || "", // Column P - Sub Category
             };
           })
           .filter((doc) => !doc.isDeleted);
@@ -453,6 +490,7 @@ export default function DocumentsList() {
               image2Url: doc[14] || "", // Column O - Image2
               image3Url: doc[15] || "", // Column P - Image3
               image4Url: doc[16] || "", // Column Q - Image4
+              subCategory: "", // Sub category is usually not in Renewal sheet
             };
           })
           .filter((doc) => !doc.isDeleted);
@@ -465,7 +503,7 @@ export default function DocumentsList() {
       );
 
       allDocs = allDocs.map((doc, index) => ({ ...doc, id: index + 1 }));
-      
+
       // If user is admin, show all documents
       if (userRole && userRole.toString().toLowerCase() === "admin") {
         setDocuments(allDocs);
@@ -592,98 +630,6 @@ export default function DocumentsList() {
     });
   };
 
-  const handleSaveRenewalDate = async (docId: number) => {
-    setIsLoading(true);
-    try {
-      const docToUpdate = documents.find((doc) => doc.id === docId);
-      if (!docToUpdate) {
-        toast({
-          title: "Error",
-          description: "Document not found",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const formattedDate = tempRenewalDate
-        ? formatDateToDDMMYYYY(tempRenewalDate.toISOString())
-        : "";
-
-      const formData = new FormData();
-      formData.append("action", "updateRenewal");
-      formData.append("sheetName", "Updated Renewal");
-      formData.append("documentId", docId.toString());
-      formData.append("documentName", docToUpdate.name);
-      formData.append("documentType", docToUpdate.documentType);
-      formData.append("category", docToUpdate.category);
-      formData.append("company", docToUpdate.company);
-      formData.append("personName", docToUpdate.personName);
-      formData.append("needsRenewal", tempNeedsRenewal.toString());
-      formData.append("renewalDate", formattedDate);
-      formData.append("email", docToUpdate.email);
-      formData.append("mobile", docToUpdate.mobile);
-      formData.append("imageUrl", docToUpdate.imageUrl);
-      formData.append("originalSerialNo", docToUpdate.serialNo);
-      formData.append("timestamp", new Date().toISOString());
-
-      const response = await fetch(
-        "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      const result = await response.json();
-
-      if (result.success) {
-        // Create a new document with updated info
-        const updatedDoc = {
-          ...docToUpdate,
-          needsRenewal: tempNeedsRenewal,
-          renewalDate: formattedDate,
-          serialNo: result.newSerialNo || docToUpdate.serialNo,
-          timestamp: new Date().toISOString(),
-        };
-
-        // Remove the old document and add the updated one at the top
-        setDocuments((prevDocs) => [
-          updatedDoc,
-          ...prevDocs.filter((doc) => doc.id !== docId),
-        ]);
-
-        toast({
-          title: "Success",
-          description: "Renewal information updated successfully",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: result.message || "Failed to update renewal information",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error updating renewal:", error);
-      toast({
-        title: "Error",
-        description: "An error occurred while updating renewal information",
-        variant: "destructive",
-      });
-    } finally {
-      setEditingRenewalDocId(null);
-      setTempRenewalDate(undefined);
-      setTempNeedsRenewal(false);
-      setIsLoading(false);
-    }
-  };
-
-  const handleCancelRenewalEdit = () => {
-    setEditingRenewalDocId(null);
-    setTempRenewalDate(undefined);
-    setTempNeedsRenewal(false);
-  };
-
   const handleUpdateDocument = async (docId: number) => {
     setIsLoading(true);
     try {
@@ -698,10 +644,22 @@ export default function DocumentsList() {
       }
 
       let updatedImageUrl = docToUpdate.imageUrl;
+      let updatedImage2Url = docToUpdate.image2Url;
+      let updatedImage3Url = docToUpdate.image3Url;
+      let updatedImage4Url = docToUpdate.image4Url;
 
-      // Upload new image if provided
+      // Upload new images if provided
       if (tempDocImage) {
         updatedImageUrl = await uploadFileToGoogleDrive(tempDocImage);
+      }
+      if (tempDocImage2) {
+        updatedImage2Url = await uploadFileToGoogleDrive(tempDocImage2);
+      }
+      if (tempDocImage3) {
+        updatedImage3Url = await uploadFileToGoogleDrive(tempDocImage3);
+      }
+      if (tempDocImage4) {
+        updatedImage4Url = await uploadFileToGoogleDrive(tempDocImage4);
       }
 
       // Format renewal date properly for sheet
@@ -712,22 +670,44 @@ export default function DocumentsList() {
       formData.append("action", "updateDocument");
       formData.append("sheetName", docToUpdate.sourceSheet);
       formData.append("serialNo", docToUpdate.serialNo);
+
+      const isRenewalSheet = docToUpdate.sourceSheet === "Updated Renewal";
+
+      // Document fields with explicit column mapping
       formData.append("documentName", tempDocName);
+      formData.append("documentNameColumn", isRenewalSheet ? "3" : "2"); // Col D for Renewal, Col C for Documents
+
+      formData.append("documentType", tempDocType);
+      formData.append("documentTypeColumn", isRenewalSheet ? "4" : "3"); // No Type in Renewal really, but mapping Col E as placeholder
+
+      formData.append("category", tempCategory);
+      formData.append("categoryColumn", isRenewalSheet ? "5" : "4"); // Column F for Renewal, Column E for Documents
+
       formData.append("personName", tempPersonName);
+      formData.append("personNameColumn", isRenewalSheet ? "10" : "7"); // Column K for Renewal, Column H for Documents
+
+      formData.append("subCategory", tempSubCategory);
+      formData.append("subCategoryColumn", "15"); // Column P (Assuming same for now, or N/A)
+
+      // Images
       formData.append("imageUrl", updatedImageUrl);
+      formData.append("imageUrlColumn", isRenewalSheet ? "13" : "11"); // Column N for Renewal, Column L for Documents
 
-      // Renewal data
+      formData.append("image2Url", updatedImage2Url);
+      formData.append("image2UrlColumn", isRenewalSheet ? "14" : "17"); // Column O for Renewal, Column R for Documents
+
+      formData.append("image3Url", updatedImage3Url);
+      formData.append("image3UrlColumn", isRenewalSheet ? "15" : "18"); // Column P for Renewal, Column S for Documents
+
+      formData.append("image4Url", updatedImage4Url);
+      formData.append("image4UrlColumn", isRenewalSheet ? "16" : "19"); // Column Q for Renewal, Column T for Documents
+
+      // Renewal data with explicit column mapping
       formData.append("renewalDate", formattedRenewalDate);
-      formData.append("needsRenewal", tempNeedsRenewal ? "Renewal" : "");
+      formData.append("renewalDateColumn", "9"); // Column J in both (usually)
 
-      console.log("Sending update request with renewal data:", {
-        sheetName: docToUpdate.sourceSheet,
-        serialNo: docToUpdate.serialNo,
-        documentName: tempDocName,
-        personName: tempPersonName,
-        renewalDate: formattedRenewalDate,
-        needsRenewal: tempNeedsRenewal ? "Renewal" : ""
-      });
+      formData.append("needsRenewal", tempNeedsRenewal ? "Yes" : "No");
+      formData.append("needsRenewalColumn", "8"); // Column I in both (usually)
 
       const response = await fetch(
         "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec",
@@ -738,28 +718,15 @@ export default function DocumentsList() {
       );
 
       const result = await response.json();
-      console.log("Server response:", result);
 
       if (result.success) {
-        setDocuments(prevDocs =>
-          prevDocs.map(doc =>
-            doc.id === docId
-              ? {
-                ...doc,
-                name: tempDocName,
-                personName: tempPersonName,
-                imageUrl: updatedImageUrl,
-                needsRenewal: tempNeedsRenewal,
-                renewalDate: formattedRenewalDate
-              }
-              : doc
-          )
-        );
-
         toast({
           title: "Success",
           description: "Document updated successfully",
         });
+
+        // Refetch documents to ensure frontend reflects actual sheet data
+        await fetchDocuments();
       } else {
         throw new Error(result.error || result.message || "Failed to update document");
       }
@@ -772,22 +739,28 @@ export default function DocumentsList() {
       });
     } finally {
       setEditingDocId(null);
-      setTempDocName("");
-      setTempPersonName("");
-      setTempDocImage(null);
-      setTempNeedsRenewal(false);
-      setTempRenewalDate(undefined);
+      resetTempStates();
       setIsLoading(false);
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditingDocId(null);
+  const resetTempStates = () => {
     setTempDocName("");
+    setTempDocType("");
+    setTempCategory("");
     setTempPersonName("");
+    setTempSubCategory("");
     setTempDocImage(null);
+    setTempDocImage2(null);
+    setTempDocImage3(null);
+    setTempDocImage4(null);
     setTempNeedsRenewal(false);
     setTempRenewalDate(undefined);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingDocId(null);
+    resetTempStates();
   };
 
   const uploadFileToGoogleDrive = async (file: File): Promise<string> => {
@@ -837,19 +810,29 @@ export default function DocumentsList() {
   const handleEditClick = (doc: Document) => {
     setEditingDocId(doc.id);
     setTempDocName(doc.name);
-    setTempPersonName(doc.personName);
-    setTempDocImage(null);
+    setTempDocType(doc.documentType);
+    setTempCategory(doc.category);
+    setTempPersonName(doc.personName || "");
+    setTempSubCategory(doc.subCategory || "");
     setTempNeedsRenewal(doc.needsRenewal);
     setTempRenewalDate(
       doc.renewalDate
         ? new Date(doc.renewalDate.split("/").reverse().join("-"))
         : undefined
     );
+    setTempDocImage(null);
+    setTempDocImage2(null);
+    setTempDocImage3(null);
+    setTempDocImage4(null);
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, docId: number) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, slot: number) => {
     if (e.target.files && e.target.files[0]) {
-      setTempDocImage(e.target.files[0]);
+      const file = e.target.files[0];
+      if (slot === 1) setTempDocImage(file);
+      else if (slot === 2) setTempDocImage2(file);
+      else if (slot === 3) setTempDocImage3(file);
+      else if (slot === 4) setTempDocImage4(file);
     }
   };
 
@@ -921,13 +904,8 @@ export default function DocumentsList() {
       return;
     }
 
-    // Get the first selected document's mobile number for auto-fill
-    const firstSelectedDoc = documents.find((doc) =>
-      selectedDocs.includes(doc.id)
-    );
-    const autoFillNumber = firstSelectedDoc?.mobile || "";
-
-    setWhatsappNumber(autoFillNumber);
+    // Do not autofill any mobile number fields
+    setWhatsappNumber("");
     setShareMethod("whatsapp");
   };
 
@@ -942,18 +920,14 @@ export default function DocumentsList() {
       return;
     }
 
-    // Get the first selected document's details for auto-fill
-    const firstSelectedDoc = documents.find((doc) =>
-      selectedDocs.includes(doc.id)
-    );
-
     setEmailData({
       to: "",
+      cc: "",
       name: "",
       subject: "",
       message: "",
     });
-    setWhatsappNumber(firstSelectedDoc?.mobile || "");
+    setWhatsappNumber(""); // Do not autofill mobile number
     setShareMethod("both");
   };
 
@@ -1051,9 +1025,6 @@ export default function DocumentsList() {
         image3Url: doc.image3Url,
         image4Url: doc.image4Url,
         sourceSheet: doc.sourceSheet,
-        mobile: formattedNumber,
-        recipientNumber: formattedNumber,
-        originalMobile: doc.mobile || ''
       }));
 
       formData.append("documents", JSON.stringify(documentsData));
@@ -1136,7 +1107,7 @@ export default function DocumentsList() {
   }
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 pt-16 md:pt-8 max-w-[1200px] mx-auto h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-indigo-50 to-white">
+    <div className="p-4 sm:p-6 md:p-8 pt-16 md:pt-8 w-full max-w-[1600px] mx-auto bg-gradient-to-b from-indigo-50 to-white flex flex-col">
       <Toaster />
 
       {/* Fixed header section */}
@@ -1374,7 +1345,7 @@ export default function DocumentsList() {
                                         if (selectedDocs.length === 0) {
                                           setSelectedDocs([doc.id]);
                                         }
-                                        setWhatsappNumber(doc.mobile || "");
+                                        setWhatsappNumber("");
                                         setShareMethod("whatsapp");
                                       }}
                                     >
@@ -1393,7 +1364,7 @@ export default function DocumentsList() {
                                           subject: "",
                                           message: "",
                                         });
-                                        setShareMethod("email");
+                                        setWhatsappNumber("");
                                         setShareMethod("both");
                                       }}
                                     >
@@ -1438,86 +1409,14 @@ export default function DocumentsList() {
                               <Users className="h-4 w-4 mr-2 text-purple-500 flex-shrink-0" />
                             )}
                             <div className="min-w-0 flex-1">
-                              {editingDocId === doc.id ? (
-                                <div className="space-y-2">
-                                  <Input
-                                    value={tempDocName}
-                                    onChange={(e) => setTempDocName(e.target.value)}
-                                    className="text-sm"
-                                    placeholder="Document name"
-                                  />
-                                  <Input
-                                    value={tempPersonName}
-                                    onChange={(e) => setTempPersonName(e.target.value)}
-                                    className="text-sm"
-                                    placeholder="Person name"
-                                  />
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      onChange={(e) => handleImageChange(e, doc.id)}
-                                      className="text-xs"
-                                    />
-                                  </div>
-
-                                  {/* RENEWAL EDIT SECTION */}
-                                  <div className="border-t pt-2 mt-2">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Checkbox
-                                        id={`needsRenewal-${doc.id}`}
-                                        checked={tempNeedsRenewal}
-                                        onCheckedChange={(checked: boolean) => {
-                                          setTempNeedsRenewal(checked);
-                                          if (!checked) setTempRenewalDate(undefined);
-                                        }}
-                                        className="border-indigo-300"
-                                      />
-                                      <label htmlFor={`needsRenewal-${doc.id}`} className="text-xs font-medium">
-                                        Renewal
-                                      </label>
-                                    </div>
-                                    {tempNeedsRenewal && (
-                                      <DatePicker
-                                        value={tempRenewalDate}
-                                        onChange={(date) => setTempRenewalDate(date)}
-                                        placeholder="Select renewal date"
-                                        className="h-8 text-xs w-full"
-                                      />
-                                    )}
-                                  </div>
-
-                                  <div className="flex gap-1">
-                                    <Button
-                                      variant="outline"
-                                      size="xs"
-                                      onClick={() => handleUpdateDocument(doc.id)}
-                                      className="h-7 px-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                                      disabled={isLoading}
-                                    >
-                                      <Check className="h-3 w-3 mr-1" /> Save
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="xs"
-                                      onClick={handleCancelEdit}
-                                      className="h-7 px-2 text-indigo-700 hover:bg-indigo-50"
-                                      disabled={isLoading}
-                                    >
-                                      <XIcon className="h-3 w-3 mr-1" /> Cancel
-                                    </Button>
-                                  </div>
+                              <div>
+                                <div className="font-medium truncate text-sm md:text-base">
+                                  {doc.name}
                                 </div>
-                              ) : (
-                                <div>
-                                  <div className="font-medium truncate text-sm md:text-base">
-                                    {doc.name}
-                                  </div>
-                                  <div className="md:hidden text-xs text-gray-500 truncate">
-                                    {doc.serialNo} • {doc.category} • {doc.company}
-                                  </div>
+                                <div className="md:hidden text-xs text-gray-500 truncate">
+                                  {doc.serialNo} • {doc.category} • {doc.company}
                                 </div>
-                              )}
+                              </div>
                             </div>
                           </div>
                         </TableCell>
@@ -1546,58 +1445,7 @@ export default function DocumentsList() {
                           {doc.personName || "-"}
                         </TableCell>
                         <TableCell className="hidden md:table-cell p-2 md:p-4">
-                          {editingRenewalDocId === doc.id ? (
-                            <div className="flex flex-col gap-2 items-start max-w-[180px]">
-                              <Checkbox
-                                id={`needsRenewalEdit-${doc.id}`}
-                                checked={tempNeedsRenewal}
-                                onCheckedChange={(checked: boolean) => {
-                                  setTempNeedsRenewal(checked);
-                                  if (!checked)
-                                    setTempRenewalDate(undefined);
-                                }}
-                                className="border-indigo-300"
-                              />
-                              <label
-                                htmlFor={`needsRenewalEdit-${doc.id}`}
-                                className="text-xs font-medium mr-2"
-                              >
-                                Needs Renewal
-                              </label>
-                              {tempNeedsRenewal && (
-                                <DatePicker
-                                  value={tempRenewalDate}
-                                  onChange={(date) =>
-                                    setTempRenewalDate(date)
-                                  }
-                                  placeholder="Select date"
-                                  className="h-8 text-xs"
-                                />
-                              )}
-                              <div className="flex gap-1 mt-1">
-                                <Button
-                                  variant="outline"
-                                  size="xs"
-                                  onClick={() =>
-                                    handleSaveRenewalDate(doc.id)
-                                  }
-                                  className="h-7 px-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                                  disabled={isLoading}
-                                >
-                                  <Check className="h-3 w-3 mr-1" /> Save
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="xs"
-                                  onClick={handleCancelRenewalEdit}
-                                  className="h-7 px-2 text-indigo-700 hover:bg-indigo-50"
-                                  disabled={isLoading}
-                                >
-                                  <XIcon className="h-3 w-3 mr-1" /> Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          ) : doc.needsRenewal ? (
+                          {doc.needsRenewal ? (
                             <div className="flex items-center">
                               <Badge
                                 className={`flex items-center gap-1 ${isDatePastToday(doc.renewalDate)
@@ -1612,12 +1460,12 @@ export default function DocumentsList() {
                                     : ""
                                     }`}
                                 >
-                                  {doc.renewalDate || "Required"}
+                                  {doc.renewalDate || "RENEWAL"}
                                 </span>
                               </Badge>
                             </div>
                           ) : (
-                            <span className="text-gray-500 text-sm">-</span>
+                            <span className="text-gray-400 text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell p-2 md:p-4">
@@ -1805,71 +1653,23 @@ export default function DocumentsList() {
                               {doc.mobile}
                             </div>
                           )}
-                          {editingRenewalDocId === doc.id ? (
-                            <div className="flex flex-col gap-2 items-start mt-2">
-                              <Checkbox
-                                id={`needsRenewalEditMobile-${doc.id}`}
-                                checked={tempNeedsRenewal}
-                                onCheckedChange={(checked: boolean) => {
-                                  setTempNeedsRenewal(checked);
-                                  if (!checked) setTempRenewalDate(undefined);
-                                }}
-                                className="border-indigo-300"
-                              />
-                              <label
-                                htmlFor={`needsRenewalEditMobile-${doc.id}`}
-                                className="text-xs font-medium mr-2"
-                              >
-                                Needs Renewal
-                              </label>
-                              {tempNeedsRenewal && (
-                                <DatePicker
-                                  value={tempRenewalDate}
-                                  onChange={(date) => setTempRenewalDate(date)}
-                                  placeholder="Select date"
-                                  className="h-8 text-xs"
-                                />
-                              )}
-                              <div className="flex gap-1 mt-1">
-                                <Button
-                                  variant="outline"
-                                  size="xs"
-                                  onClick={() => handleSaveRenewalDate(doc.id)}
-                                  className="h-7 px-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                                  disabled={isLoading}
-                                >
-                                  <Check className="h-3 w-3 mr-1" /> Save
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="xs"
-                                  onClick={handleCancelRenewalEdit}
-                                  className="h-7 px-2 text-indigo-700 hover:bg-indigo-50"
-                                  disabled={isLoading}
-                                >
-                                  <XIcon className="h-3 w-3 mr-1" /> Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            doc.needsRenewal && (
-                              <Badge
-                                className={`mt-1 text-xs flex items-center gap-1 w-fit ${isDatePastToday(doc.renewalDate)
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-amber-100 text-amber-800"
+                          {doc.needsRenewal && (
+                            <Badge
+                              className={`mt-1 text-xs flex items-center gap-1 w-fit ${isDatePastToday(doc.renewalDate)
+                                ? "bg-red-100 text-red-800"
+                                : "bg-amber-100 text-amber-800"
+                                }`}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              <span
+                                className={`font-mono ${isDatePastToday(doc.renewalDate)
+                                  ? "text-red-600"
+                                  : ""
                                   }`}
                               >
-                                <RefreshCw className="h-3 w-3" />
-                                <span
-                                  className={`font-mono ${isDatePastToday(doc.renewalDate)
-                                    ? "text-red-600"
-                                    : ""
-                                    }`}
-                                >
-                                  {doc.renewalDate || "Required"}
-                                </span>
-                              </Badge>
-                            )
+                                {doc.renewalDate || "Required"}
+                              </span>
+                            </Badge>
                           )}
                           {/* Mobile view for multiple images */}
                           <div className="flex flex-wrap gap-2 mt-1">
@@ -1962,7 +1762,7 @@ export default function DocumentsList() {
                               if (selectedDocs.length === 0) {
                                 setSelectedDocs([doc.id]);
                               }
-                              setWhatsappNumber(doc.mobile || "");
+                              setWhatsappNumber("");
                               setShareMethod("whatsapp");
                             }}
                           >
@@ -1981,7 +1781,7 @@ export default function DocumentsList() {
                                 subject: "",
                                 message: "",
                               });
-                              setWhatsappNumber(doc.mobile || "");
+                              setWhatsappNumber("");
                               setShareMethod("both");
                             }}
                           >
@@ -2014,6 +1814,185 @@ export default function DocumentsList() {
           </div>
         )}
       </div>
+
+      {/* Edit Document Dialog */}
+      <Dialog open={editingDocId !== null} onOpenChange={(open) => !open && handleCancelEdit()}>
+        <DialogContent className="sm:max-w-4xl max-h-[95vh] flex flex-col p-0 overflow-hidden border-indigo-100 shadow-xl">
+          <DialogHeader className="p-6 pb-0">
+            <DialogTitle className="text-xl font-bold text-indigo-800 flex items-center">
+              <FileText className="h-6 w-6 mr-2 text-indigo-600" />
+              Edit Document: {documents.find(d => d.id === editingDocId)?.serialNo}
+            </DialogTitle>
+            <DialogDescription>
+              Update document information and attachments. Changes will be saved to the sheet.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs defaultValue="general" className="flex-1 flex flex-col overflow-hidden mt-4">
+            <div className="px-6">
+              <TabsList className="grid grid-cols-3 bg-indigo-50/50 p-1">
+                <TabsTrigger value="general" className="data-[state=active]:bg-white data-[state=active]:text-indigo-700">General Info</TabsTrigger>
+                <TabsTrigger value="contact" className="data-[state=active]:bg-white data-[state=active]:text-indigo-700">Contact & Renewal</TabsTrigger>
+                <TabsTrigger value="images" className="data-[state=active]:bg-white data-[state=active]:text-indigo-700">Images</TabsTrigger>
+              </TabsList>
+            </div>
+
+            <ScrollArea className="flex-1 p-6">
+              <TabsContent value="general" className="space-y-4 mt-0 outline-none">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-indigo-700 font-medium">Document Name</Label>
+                    <Input
+                      value={tempDocName}
+                      onChange={(e) => setTempDocName(e.target.value)}
+                      className="border-indigo-200 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-indigo-700 font-medium">Document Type</Label>
+                    <Select value={tempDocType} onValueChange={setTempDocType}>
+                      <SelectTrigger className="border-indigo-200">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {documentTypes.map(type => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-indigo-700 font-medium">Category</Label>
+                    <Select value={tempCategory} onValueChange={setTempCategory}>
+                      <SelectTrigger className="border-indigo-200">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Personal">Personal</SelectItem>
+                        <SelectItem value="Company">Company</SelectItem>
+                        <SelectItem value="Director">Director</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-subcategory">Sub-Category</Label>
+                    <Input
+                      id="edit-subcategory"
+                      value={tempSubCategory}
+                      onChange={(e) => setTempSubCategory(e.target.value)}
+                      placeholder="e.g., Secondary type"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-person">Entity Name</Label>
+                    <Input
+                      id="edit-person"
+                      value={tempPersonName}
+                      onChange={(e) => setTempPersonName(e.target.value)}
+                      placeholder="Name of person/entity"
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="contact" className="space-y-6 mt-0 outline-none">
+                <div className="p-4 bg-indigo-50/50 rounded-lg border border-indigo-100 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-indigo-900 font-semibold">Needs Renewal</Label>
+                      <p className="text-xs text-indigo-600">Enable if this document has an expiration date</p>
+                    </div>
+                    <Switch
+                      checked={tempNeedsRenewal}
+                      onCheckedChange={setTempNeedsRenewal}
+                    />
+                  </div>
+
+                  {tempNeedsRenewal && (
+                    <div className="space-y-2 pt-2 border-t border-indigo-100">
+                      <Label className="text-indigo-700 font-medium">Renewal Date</Label>
+                      <DatePicker
+                        value={tempRenewalDate}
+                        onChange={setTempRenewalDate}
+                        className="w-full border-indigo-200"
+                      />
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="images" className="space-y-6 mt-0 outline-none">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {[1, 2, 3, 4].map((slot) => {
+                    const doc = documents.find(d => d.id === editingDocId);
+                    const currentUrl = slot === 1 ? doc?.imageUrl :
+                      slot === 2 ? doc?.image2Url :
+                        slot === 3 ? doc?.image3Url :
+                          doc?.image4Url;
+                    const tempFile = slot === 1 ? tempDocImage :
+                      slot === 2 ? tempDocImage2 :
+                        slot === 3 ? tempDocImage3 :
+                          tempDocImage4;
+
+                    return (
+                      <div key={slot} className="space-y-3 p-4 border border-indigo-100 rounded-lg bg-white shadow-sm">
+                        <Label className="text-indigo-700 font-bold flex items-center justify-between">
+                          Image #{slot}
+                          {currentUrl && <Badge variant="outline" className="text-[10px] h-4">Existing</Badge>}
+                        </Label>
+
+                        <div className="aspect-video relative rounded-md border border-dashed border-indigo-200 bg-indigo-50/30 flex items-center justify-center overflow-hidden">
+                          {tempFile ? (
+                            <div className="text-xs text-indigo-600 font-medium px-2 text-center">
+                              {tempFile.name}
+                            </div>
+                          ) : currentUrl ? (
+                            <img src={formatImageUrl(currentUrl)} alt={`Slot ${slot}`} className="object-cover w-full h-full" />
+                          ) : (
+                            <ImageIcon className="h-8 w-8 text-indigo-200" />
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleImageChange(e, slot as 1 | 2 | 3 | 4)}
+                            className="text-xs border-indigo-100 cursor-pointer h-8 file:mr-2 file:bg-indigo-50 file:text-indigo-700 file:border-0"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </TabsContent>
+            </ScrollArea>
+          </Tabs>
+
+          <DialogFooter className="p-6 pt-2 bg-indigo-50/30 border-t border-indigo-100">
+            <Button variant="ghost" onClick={handleCancelEdit} disabled={isLoading}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => editingDocId && handleUpdateDocument(editingDocId)}
+              disabled={isLoading}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white min-w-[100px]"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <EmailShareDialog
         open={shareMethod === "email"}

@@ -41,7 +41,7 @@ interface EmailShareDialogProps {
     name: string
     subject: string
     message: string
-  }) => Promise<void>
+  }) => Promise<boolean>
 }
 
 export function EmailShareDialog({
@@ -58,25 +58,25 @@ export function EmailShareDialog({
     if (!emailData.to || !emailData.subject || !emailData.message) {
       toast({
         title: "Error",
-        description: "Please fill all required fields",
-        variant: "destructive",
+        description: "Failed to share documents",
       })
       return
     }
 
     setIsSending(true)
     try {
-      await onShare(emailData)
-      toast({
-        title: "Success",
-        description: "Documents shared successfully and record saved",
-      })
-      onOpenChange(false)
+      const success = await onShare(emailData)
+      if (success) {
+        toast({
+          title: "Success",
+          description: "Documents shared successfully and record saved",
+        })
+        onOpenChange(false)
+      }
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to share documents",
-        variant: "destructive",
       })
     } finally {
       setIsSending(false)

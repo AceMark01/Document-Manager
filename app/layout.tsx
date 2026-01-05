@@ -69,8 +69,14 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Document Manager",
   description: "Manage and share your documents easily",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
   generator: 'v0.dev'
+}
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({
@@ -90,7 +96,7 @@ export default function RootLayout({
                 <Footer />
               </div>
             </div>
-             <Toaster /> {/* Add this line */}
+            <Toaster /> {/* Add this line */}
           </AuthProvider>
         </ThemeProvider>
       </body>

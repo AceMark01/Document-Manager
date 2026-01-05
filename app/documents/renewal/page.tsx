@@ -57,7 +57,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 interface Document {
   id: number;
@@ -77,6 +82,8 @@ interface Document {
   image2Url: string;
   image3Url: string;
   image4Url: string;
+  subCategory: string;
+  sourceSheet: string;
 }
 
 const formatDateToDDMMYYYY = (dateString: string): string => {
@@ -303,6 +310,19 @@ export default function DocumentsList() {
     undefined
   );
   const [tempNeedsRenewal, setTempNeedsRenewal] = useState<boolean>(false);
+
+  const [editingDocId, setEditingDocId] = useState<number | null>(null);
+  const [tempDocName, setTempDocName] = useState("");
+  const [tempDocType, setTempDocType] = useState("");
+  const [tempCategory, setTempCategory] = useState("");
+  const [tempPersonName, setTempPersonName] = useState("");
+  const [tempSubCategory, setTempSubCategory] = useState("");
+
+  const [tempDocImage, setTempDocImage] = useState<File | null>(null);
+  const [tempDocImage2, setTempDocImage2] = useState<File | null>(null);
+  const [tempDocImage3, setTempDocImage3] = useState<File | null>(null);
+  const [tempDocImage4, setTempDocImage4] = useState<File | null>(null);
+
   const [imagePopup, setImagePopup] = useState<{ open: boolean; url: string }>({
     open: false,
     url: "",
@@ -515,6 +535,8 @@ export default function DocumentsList() {
             image4Url: doc[19] || "",
             email: doc[12] || "",
             mobile: doc[13] ? String(doc[13]) : "",
+            subCategory: doc[15] || "",
+            sourceSheet: "Documents",
           }))
           .filter(
             (doc: Document) =>
@@ -589,74 +611,137 @@ export default function DocumentsList() {
     }
   };
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, slot: number) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setSelectedImage(file);
-
-      const previewUrl = URL.createObjectURL(file);
-      setPreviewImage(previewUrl);
-
-      const imageUrl = await handleImageUpload(file);
-      if (imageUrl) {
-        setTempImageUrl(imageUrl);
-      }
+      if (slot === 1) setTempDocImage(file);
+      else if (slot === 2) setTempDocImage2(file);
+      else if (slot === 3) setTempDocImage3(file);
+      else if (slot === 4) setTempDocImage4(file);
     }
   };
 
-  const handleSaveRenewalDate = async () => {
-    if (!editingRenewalDoc) return;
+  const uploadFileToGoogleDrive = async (file: File): Promise<string> => {
+    const scriptUrl = "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec";
 
-    setIsLoading(true);
     try {
-      let newImageUrl = editingRenewalDoc.imageUrl;
+      const base64String = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = error => reject(error);
+      });
 
-      if (selectedImage) {
-        try {
-          const uploadedUrl = await handleImageUpload(selectedImage);
-          if (!uploadedUrl) {
-            throw new Error("Image upload failed - no URL returned");
-          }
-          newImageUrl = uploadedUrl;
-        } catch (uploadError) {
-          console.error("Image upload error:", uploadError);
-          toast({
-            title: "Upload Error",
-            description: "Failed to upload image. Please try again.",
-            variant: "destructive",
-          });
-          return;
-        }
+      const formData = new FormData();
+      formData.append('action', 'uploadFile');
+      formData.append('fileName', file.name);
+      formData.append('mimeType', file.type);
+      formData.append('folderId', '14gmh9fiQuacCztSMu7Uts0e3AtSlXQYx');
+      formData.append('base64Data', base64String);
+
+      const response = await fetch(scriptUrl, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (tempNeedsRenewal && !newImageUrl) {
+      const result = await response.json();
+
+      if (result.success && result.fileUrl) {
+        return result.fileUrl;
+      } else {
+        throw new Error(result.error || "File upload failed");
+      }
+    } catch (error) {
+      console.error("File upload error:", error);
+      throw new Error(`Failed to upload file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleUpdateDocument = async (docId: number) => {
+    setIsLoading(true);
+    try {
+      const docToUpdate = documents.find((doc) => doc.id === docId);
+      if (!docToUpdate) {
         toast({
           title: "Error",
-          description: "Image is required for document renewal",
+          description: "Document not found",
           variant: "destructive",
         });
         return;
       }
 
-      // Format the date as DD/MM/YYYY
-      const formattedDate = tempRenewalDate
-        ? `${tempRenewalDate.getDate().toString().padStart(2, "0")}/${(
-          tempRenewalDate.getMonth() + 1
-        )
-          .toString()
-          .padStart(2, "0")}/${tempRenewalDate.getFullYear()}`
+      let updatedImageUrl = docToUpdate.imageUrl;
+      let updatedImage2Url = docToUpdate.image2Url;
+      let updatedImage3Url = docToUpdate.image3Url;
+      let updatedImage4Url = docToUpdate.image4Url;
+
+      // Upload new images if provided
+      if (tempDocImage) {
+        updatedImageUrl = await uploadFileToGoogleDrive(tempDocImage);
+      }
+      if (tempDocImage2) {
+        updatedImage2Url = await uploadFileToGoogleDrive(tempDocImage2);
+      }
+      if (tempDocImage3) {
+        updatedImage3Url = await uploadFileToGoogleDrive(tempDocImage3);
+      }
+      if (tempDocImage4) {
+        updatedImage4Url = await uploadFileToGoogleDrive(tempDocImage4);
+      }
+
+      // Format current renewal date properly for sheet if it exists
+      const formattedRenewalDate = tempRenewalDate
+        ? `${tempRenewalDate.getDate().toString().padStart(2, "0")}/${(tempRenewalDate.getMonth() + 1).toString().padStart(2, "0")}/${tempRenewalDate.getFullYear()}${tempRenewalTime ? " " + tempRenewalTime : ""}`
         : "";
 
-      // Combine date and time in the format "DD/MM/YYYY HH:mm"
-      const renewalDateTime = `${formattedDate}${tempRenewalTime ? " " + tempRenewalTime : ""
-        }`;
-
       const formData = new FormData();
-      formData.append("action", "updateRenewal");
-      formData.append("sheetName", "Documents");
-      formData.append("serialNo", editingRenewalDoc.serialNo);
-      formData.append("renewalDate", renewalDateTime);
-      formData.append("imageUrl", newImageUrl || "");
+      formData.append("action", "updateDocument");
+      formData.append("sheetName", docToUpdate.sourceSheet);
+      formData.append("serialNo", docToUpdate.serialNo);
+
+      // Document fields with explicit column mapping
+      formData.append("documentName", tempDocName);
+      formData.append("documentNameColumn", "2"); // Column C
+
+      formData.append("documentType", tempDocType);
+      formData.append("documentTypeColumn", "3"); // Column D
+
+      formData.append("category", tempCategory);
+      formData.append("categoryColumn", "4"); // Column E
+
+      formData.append("personName", tempPersonName);
+      formData.append("personNameColumn", "7"); // Column H
+
+      formData.append("subCategory", tempSubCategory);
+      formData.append("subCategoryColumn", "15"); // Column P
+
+      // Images
+      formData.append("imageUrl", updatedImageUrl);
+      formData.append("imageUrlColumn", "11"); // Column L
+
+      formData.append("image2Url", updatedImage2Url);
+      formData.append("image2UrlColumn", "17"); // Column R
+
+      formData.append("image3Url", updatedImage3Url);
+      formData.append("image3UrlColumn", "18"); // Column S
+
+      formData.append("image4Url", updatedImage4Url);
+      formData.append("image4UrlColumn", "19"); // Column T
+
+      // Renewal data with explicit column mapping
+      formData.append("renewalDate", formattedRenewalDate);
+      formData.append("renewalDateColumn", "9"); // Column J (0-indexed)
+
+      formData.append("needsRenewal", tempNeedsRenewal ? "Yes" : "No");
+      formData.append("needsRenewalColumn", "8"); // Column I (0-indexed)
 
       const response = await fetch(
         "https://script.google.com/macros/s/AKfycbxPsSSePFSXwsRFgRNYv4xUn205zI4hgeW04CTaqK7p3InSM1TKFCmTBqM5bNFZfHOIJA/exec",
@@ -666,74 +751,56 @@ export default function DocumentsList() {
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
       const result = await response.json();
 
-      if (!result.success) {
-        throw new Error(result.message || "Failed to update renewal");
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "Document updated successfully",
+        });
+
+        // Refetch documents to ensure frontend reflects actual sheet data
+        await fetchDocuments();
+      } else {
+        throw new Error(result.error || result.message || "Failed to update document");
       }
-
-      setDocuments((prevDocs) =>
-        prevDocs
-          .map((doc) =>
-            doc.id === editingRenewalDoc.id
-              ? {
-                ...doc,
-                needsRenewal: tempNeedsRenewal,
-                renewalDate: renewalDateTime,
-                imageUrl: newImageUrl || doc.imageUrl,
-                timestamp: new Date().toISOString(),
-              }
-              : doc
-          )
-          .sort(
-            (a, b) =>
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          )
-      );
-
-      toast({
-        title: "Success",
-        description: `Renewal updated successfully`,
-      });
-
-      // Close the dialog
-      setEditingRenewalDoc(null);
-      setTempRenewalDate(undefined);
-      setTempNeedsRenewal(false);
-      setSelectedImage(null);
-      setPreviewImage(null);
-      setTempImageUrl(null);
-      setTempRenewalTime("");
     } catch (error) {
-      console.error("Error updating renewal:", error);
+      console.error("Error updating document:", error);
       toast({
         title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "An error occurred while updating renewal information",
+        description: `Failed to update document: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
     } finally {
+      setEditingDocId(null);
+      resetTempStates();
       setIsLoading(false);
     }
   };
 
-  const handleCancelRenewalEdit = () => {
-    setEditingRenewalDoc(null);
-    setTempRenewalDate(undefined);
+  const resetTempStates = () => {
+    setTempDocName("");
+    setTempDocType("");
+    setTempCategory("");
+    setTempPersonName("");
+    setTempSubCategory("");
+    setTempDocImage(null);
+    setTempDocImage2(null);
+    setTempDocImage3(null);
+    setTempDocImage4(null);
     setTempNeedsRenewal(false);
-    setSelectedImage(null);
-    setPreviewImage(null);
-    setTempImageUrl(null);
+    setTempRenewalDate(undefined);
+    setTempRenewalTime("");
   };
 
   const handleEditRenewalClick = (doc: Document) => {
-    setEditingRenewalDoc(doc);
+    setEditingDocId(doc.id);
+    setTempDocName(doc.name);
+    setTempDocType(doc.documentType);
+    setTempCategory(doc.category);
+    setTempPersonName(doc.personName);
+    setTempSubCategory(doc.subCategory);
+    setTempNeedsRenewal(doc.needsRenewal);
 
     // Parse the existing renewal date and time
     if (doc.renewalDate) {
@@ -751,8 +818,15 @@ export default function DocumentsList() {
       }
     }
 
-    setTempNeedsRenewal(doc.needsRenewal);
-    setTempImageUrl(doc.imageUrl || null);
+    setTempDocImage(null);
+    setTempDocImage2(null);
+    setTempDocImage3(null);
+    setTempDocImage4(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingDocId(null);
+    resetTempStates();
   };
 
   const filteredDocuments = documents.filter((doc) => {
@@ -879,200 +953,249 @@ export default function DocumentsList() {
     <div className="p-4 sm:p-6 md:p-8 pt-16 md:pt-8 max-w-[1200px] mx-auto">
       <Toaster />
 
-      {/* Renewal Dialog */}
+      {/* Edit Document Dialog */}
       <Dialog
-        open={!!editingRenewalDoc}
-        onOpenChange={(open) => !open && handleCancelRenewalEdit()}
+        open={!!editingDocId}
+        onOpenChange={(open) => !open && handleCancelEdit()}
       >
-        <DialogContent className="sm:max-w-[625px]">
-          <DialogHeader>
-            <DialogTitle className="text-[#7569F6] flex items-center">
-              <RefreshCw className="h-5 w-5 mr-2" />
-              Update Document Renewal
+        <DialogContent className="sm:max-w-[800px] h-[90vh] flex flex-col p-0">
+          <DialogHeader className="p-6 pb-0">
+            <DialogTitle className="text-2xl font-bold text-indigo-800 flex items-center">
+              <FileText className="h-6 w-6 mr-2 text-indigo-600" />
+              Edit Document Details
             </DialogTitle>
             <DialogDescription>
-              Update the renewal information for this document
+              Update information for Serial No:{" "}
+              <span className="font-mono font-bold text-indigo-600">
+                {documents.find((d) => d.id === editingDocId)?.serialNo}
+              </span>
             </DialogDescription>
           </DialogHeader>
 
-          {editingRenewalDoc && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <span className="text-sm font-medium text-gray-700">
-                  Serial No:
-                </span>
-                <span className="col-span-3 font-mono">
-                  {editingRenewalDoc.serialNo}
-                </span>
-              </div>
+          <Tabs defaultValue="general" className="flex-1 flex flex-col min-h-0">
+            <div className="px-6 border-b">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="general">General Info</TabsTrigger>
+                <TabsTrigger value="contact">Contact & Renewal</TabsTrigger>
+                <TabsTrigger value="images">Images</TabsTrigger>
+              </TabsList>
+            </div>
 
-              <div className="grid grid-cols-4 items-center gap-4">
-                <span className="text-sm font-medium text-gray-700">
-                  Document Name:
-                </span>
-                <span className="col-span-3">{editingRenewalDoc.name}</span>
-              </div>
-
-              <div className="grid grid-cols-4 items-center gap-4">
-                <span className="text-sm font-medium text-gray-700">
-                  Person Name:
-                </span>
-                <span className="col-span-3">
-                  {editingRenewalDoc.personName}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-4 items-center gap-4">
-                <span className="text-sm font-medium text-gray-700">
-                  Current Image:
-                </span>
-                <div className="col-span-3">
-                  {editingRenewalDoc.imageUrl ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleViewImage(editingRenewalDoc.imageUrl)
-                      }
-                      className="text-[#5477F6] hover:underline flex items-center"
+            <ScrollArea className="flex-1 p-6">
+              <TabsContent value="general" className="mt-0 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name">Document Name</Label>
+                    <Input
+                      id="edit-name"
+                      value={tempDocName}
+                      onChange={(e) => setTempDocName(e.target.value)}
+                      placeholder="e.g., Driver's License"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-type">Document Type</Label>
+                    <Select
+                      value={tempDocType}
+                      onValueChange={setTempDocType}
                     >
-                      <ImageIcon className="h-4 w-4 mr-1" />
-                      View Current Image
-                    </button>
-                  ) : (
-                    <span className="text-gray-500">No image available</span>
+                      <SelectTrigger id="edit-type">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Personal">Personal</SelectItem>
+                        <SelectItem value="Company">Company</SelectItem>
+                        <SelectItem value="Director">Director</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-category">Category</Label>
+                    <Input
+                      id="edit-category"
+                      value={tempCategory}
+                      onChange={(e) => setTempCategory(e.target.value)}
+                      placeholder="e.g., Identity, Vehicle"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-subcategory">Sub-Category</Label>
+                    <Input
+                      id="edit-subcategory"
+                      value={tempSubCategory}
+                      onChange={(e) => setTempSubCategory(e.target.value)}
+                      placeholder="e.g., Secondary type"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-person">Entity Name</Label>
+                    <Input
+                      id="edit-person"
+                      value={tempPersonName}
+                      onChange={(e) => setTempPersonName(e.target.value)}
+                      placeholder="Name of person/entity"
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="contact" className="mt-0 space-y-6">
+                <Card className="p-4 border-dashed bg-indigo-50/30">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="space-y-0.5">
+                      <Label className="text-base font-semibold text-indigo-900">
+                        Renewal Settings
+                      </Label>
+                      <p className="text-sm text-indigo-600/70">
+                        Enable this to track expiration
+                      </p>
+                    </div>
+                    <Switch
+                      checked={tempNeedsRenewal}
+                      onCheckedChange={setTempNeedsRenewal}
+                    />
+                  </div>
+
+                  {tempNeedsRenewal && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      <div className="space-y-2">
+                        <Label>Renewal Date</Label>
+                        <DatePicker
+                          value={tempRenewalDate}
+                          onChange={setTempRenewalDate}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Time (optional)</Label>
+                        <Input
+                          type="time"
+                          value={tempRenewalTime}
+                          onChange={(e) => setTempRenewalTime(e.target.value)}
+                        />
+                      </div>
+                    </div>
                   )}
-                </div>
-              </div>
+                </Card>
+              </TabsContent>
 
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label
-                  htmlFor="needsRenewal"
-                  className="text-sm font-medium text-gray-700"
-                >
-                  Needs Renewal:
-                </label>
-                <div className="col-span-3 flex items-center">
-                  <Checkbox
-                    id="needsRenewal"
-                    checked={tempNeedsRenewal}
-                    onCheckedChange={(checked: boolean) => {
-                      setTempNeedsRenewal(checked);
-                      if (!checked) setTempRenewalDate(undefined);
-                    }}
-                    className="mr-2"
-                  />
-                  <label htmlFor="needsRenewal" className="text-sm">
-                    This document requires renewal
-                  </label>
-                </div>
-              </div>
+              <TabsContent value="images" className="mt-0 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[1, 2, 3, 4].map((slot) => {
+                    const currentDoc = documents.find((d) => d.id === editingDocId);
+                    const existingUrl = slot === 1 ? currentDoc?.imageUrl :
+                      slot === 2 ? currentDoc?.image2Url :
+                        slot === 3 ? currentDoc?.image3Url :
+                          currentDoc?.image4Url;
+                    const tempFile = slot === 1 ? tempDocImage :
+                      slot === 2 ? tempDocImage2 :
+                        slot === 3 ? tempDocImage3 :
+                          tempDocImage4;
 
-              {tempNeedsRenewal && (
-                <>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label
-                      htmlFor="renewalDate"
-                      className="text-sm font-medium text-gray-700"
-                    >
-                      Renewal Date:
-                    </label>
-                    <div className="col-span-3">
-                      <DatePicker
-                        id="renewalDate"
-                        value={tempRenewalDate}
-                        onChange={setTempRenewalDate}
-                        placeholder="Select renewal date"
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label
-                      htmlFor="renewalTime"
-                      className="text-sm font-medium text-gray-700"
-                    >
-                      Renewal Time:
-                    </label>
-                    <div className="col-span-3">
-                      <Input
-                        id="renewalTime"
-                        type="time"
-                        value={tempRenewalTime}
-                        onChange={(e) => setTempRenewalTime(e.target.value)}
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label
-                      htmlFor="documentImage"
-                      className="text-sm font-medium text-gray-700"
-                    >
-                      New Image:
-                    </label>
-                    <div className="col-span-3">
-                      <div className="flex items-center gap-2">
-                        <label
-                          htmlFor="documentImage"
-                          className={`text-sm font-medium ${!tempImageUrl ? "text-red-600" : "text-[#7569F6]"
-                            } cursor-pointer hover:text-[#935DF6] flex items-center gap-1 border border-input rounded-md px-3 py-2`}
-                        >
-                          <ImageIcon className="h-4 w-4" />
-                          {uploadingImage
-                            ? "Uploading..."
-                            : tempImageUrl
-                              ? "Change Image"
-                              : "Upload Image*"}
-                        </label>
+                    return (
+                      <div key={slot} className="space-y-2">
+                        <Label className="flex justify-between">
+                          Image {slot}
+                          {existingUrl && (
+                            <Badge variant="outline" className="text-[10px] h-4">Existing</Badge>
+                          )}
+                        </Label>
+                        <div className="relative group aspect-video rounded-lg border-2 border-dashed border-indigo-200 bg-indigo-50/30 flex flex-col items-center justify-center overflow-hidden transition-all hover:border-indigo-400">
+                          {tempFile ? (
+                            <div className="relative w-full h-full">
+                              <img
+                                src={URL.createObjectURL(tempFile)}
+                                alt={`Slot ${slot}`}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (slot === 1) setTempDocImage(null);
+                                    else if (slot === 2) setTempDocImage2(null);
+                                    else if (slot === 3) setTempDocImage3(null);
+                                    else if (slot === 4) setTempDocImage4(null);
+                                  }}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          ) : existingUrl ? (
+                            <div className="relative w-full h-full">
+                              <img
+                                src={existingUrl}
+                                alt={`Slot ${slot}`}
+                                className="w-full h-full object-cover opacity-60"
+                              />
+                              <div className="absolute inset-0 flex flex-col items-center justify-center space-y-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => window.open(existingUrl, "_blank")}
+                                  className="shadow-sm"
+                                >
+                                  View Current
+                                </Button>
+                                <Label
+                                  htmlFor={`upload-${slot}`}
+                                  className="cursor-pointer bg-white/80 hover:bg-white px-3 py-1 rounded-md text-sm font-medium transition-colors"
+                                >
+                                  Replace New
+                                </Label>
+                              </div>
+                            </div>
+                          ) : (
+                            <Label
+                              htmlFor={`upload-${slot}`}
+                              className="flex flex-col items-center cursor-pointer text-indigo-400 group-hover:text-indigo-600"
+                            >
+                              <Plus className="h-8 w-8 mb-2" />
+                              <span className="text-sm font-medium">Add Image</span>
+                            </Label>
+                          )}
+                        </div>
                         <input
-                          id="documentImage"
+                          id={`upload-${slot}`}
                           type="file"
                           accept="image/*"
-                          onChange={handleImageChange}
                           className="hidden"
-                          disabled={uploadingImage}
+                          onChange={(e) => handleImageChange(e, slot)}
                         />
-                        {previewImage && (
-                          <button
-                            type="button"
-                            onClick={() => handleViewImage(previewImage)}
-                            className="text-sm text-[#5477F6] hover:underline"
-                          >
-                            Preview
-                          </button>
-                        )}
                       </div>
-                      {!tempImageUrl && tempNeedsRenewal && (
-                        <p className="text-xs text-red-600 mt-1">
-                          Image is required for renewal
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                    );
+                  })}
+                </div>
+              </TabsContent>
+            </ScrollArea>
 
-          <div className="flex justify-end gap-2 mt-4">
-            <Button
-              variant="outline"
-              onClick={handleCancelRenewalEdit}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveRenewalDate}
-              disabled={isLoading || (tempNeedsRenewal && !tempImageUrl)}
-              className="bg-[#7569F6] hover:bg-[#935DF6]"
-            >
-              {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Save Changes
-            </Button>
-          </div>
+            <DialogFooter className="p-6 border-t mt-auto">
+              <Button
+                variant="outline"
+                onClick={handleCancelEdit}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => editingDocId && handleUpdateDocument(editingDocId)}
+                disabled={isLoading}
+                className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white min-w-[120px]"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            </DialogFooter>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
@@ -1290,10 +1413,10 @@ export default function DocumentsList() {
                             <TableCell className="hidden md:table-cell p-2 md:p-4">
                               <Badge
                                 className={`${doc.category === "Personal"
-                                    ? "bg-[#7569F6]/10 text-[#7569F6]"
-                                    : doc.category === "Company"
-                                      ? "bg-[#5477F6]/10 text-[#5477F6]"
-                                      : "bg-[#935DF6]/10 text-[#935DF6]"
+                                  ? "bg-[#7569F6]/10 text-[#7569F6]"
+                                  : doc.category === "Company"
+                                    ? "bg-[#5477F6]/10 text-[#5477F6]"
+                                    : "bg-[#935DF6]/10 text-[#935DF6]"
                                   }`}
                               >
                                 {doc.category || "N/A"}
@@ -1315,12 +1438,12 @@ export default function DocumentsList() {
                                 <div className="flex items-center">
                                   <Badge
                                     className={`${getRenewalStatus(doc.renewalDate) ===
-                                        "overdue"
-                                        ? "bg-red-100 text-red-800" // Expired
-                                        : getRenewalStatus(doc.renewalDate) ===
-                                          "today"
-                                          ? "bg-yellow-100 text-yellow-800" // Today
-                                          : "bg-[#935DF6]/10 text-[#935DF6]" // Upcoming
+                                      "overdue"
+                                      ? "bg-red-100 text-red-800" // Expired
+                                      : getRenewalStatus(doc.renewalDate) ===
+                                        "today"
+                                        ? "bg-yellow-100 text-yellow-800" // Today
+                                        : "bg-[#935DF6]/10 text-[#935DF6]" // Upcoming
                                       } flex items-center gap-1`}
                                   >
                                     <RefreshCw className="h-3 w-3" />
@@ -1433,10 +1556,10 @@ export default function DocumentsList() {
                   >
                     <div
                       className={`p-3 border-l-4 ${doc.category === "Personal"
-                          ? "border-l-[#7569F6]"
-                          : doc.category === "Company"
-                            ? "border-l-[#5477F6]"
-                            : "border-l-[#935DF6]"
+                        ? "border-l-[#7569F6]"
+                        : doc.category === "Company"
+                          ? "border-l-[#5477F6]"
+                          : "border-l-[#935DF6]"
                         }`}
                     >
                       <div className="flex items-center justify-between">
@@ -1515,10 +1638,10 @@ export default function DocumentsList() {
                         {doc.needsRenewal && (
                           <Badge
                             className={`${getRenewalStatus(doc.renewalDate) === "overdue"
-                                ? "bg-red-100 text-red-800" // Expired
-                                : getRenewalStatus(doc.renewalDate) === "today"
-                                  ? "bg-yellow-100 text-yellow-800" // Today
-                                  : "bg-[#935DF6]/10 text-[#935DF6]" // Upcoming
+                              ? "bg-red-100 text-red-800" // Expired
+                              : getRenewalStatus(doc.renewalDate) === "today"
+                                ? "bg-yellow-100 text-yellow-800" // Today
+                                : "bg-[#935DF6]/10 text-[#935DF6]" // Upcoming
                               } flex items-center gap-1 mt-2`}
                           >
                             <RefreshCw className="h-3 w-3" />
